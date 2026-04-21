@@ -1,1 +1,46 @@
+/* Hide default Streamlit branding */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
 
+/* Global Dark Corporate Theme */
+.stApp {
+    background-color: #0E1117;
+    color: #FAFAFA;
+}
+
+/* Glassmorphism Metric Cards */
+div[data-testid="metric-container"] {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border-radius: 10px;
+    padding: 15px;
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+div[data-testid="metric-container"]:hover {
+    transform: translateY(-5px);
+    border-color: #00A9FF;
+}
+
+/* Premium Drag and Drop Uploader */
+[data-testid="stFileUploadDropzone"] {
+    background-color: rgba(0, 169, 255, 0.05);
+    border: 2px dashed #00A9FF;
+    border-radius: 12px;
+    transition: all 0.3s ease-in-out;
+}
+[data-testid="stFileUploadDropzone"]:hover {
+    background-color: rgba(0, 169, 255, 0.15);
+    border-color: #0082c8;
+}
+
+/* Premium DataFrames */
+.stDataFrame {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
