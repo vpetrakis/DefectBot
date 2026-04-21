@@ -3,44 +3,48 @@
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
-/* Global Dark Corporate Theme */
+/* Global Minimalist Dark Theme */
 .stApp {
-    background-color: #0E1117;
-    color: #FAFAFA;
+    background-color: #0b0f19;
+    color: #e2e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* Glassmorphism Metric Cards */
+/* Typography refinements */
+h1, h2, h3 {
+    font-weight: 400 !important;
+    letter-spacing: -0.5px;
+    color: #ffffff;
+}
+
+/* High-End Metric Cards */
 div[data-testid="metric-container"] {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    border-radius: 10px;
-    padding: 15px;
-    transition: transform 0.3s ease, border-color 0.3s ease;
+    background: #111827;
+    border: 1px solid #1f2937;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border-radius: 4px;
+    padding: 20px;
+    transition: border-color 0.2s ease-in-out;
 }
 
 div[data-testid="metric-container"]:hover {
-    transform: translateY(-5px);
-    border-color: #00A9FF;
+    border-color: #3b82f6;
 }
 
 /* Premium Drag and Drop Uploader */
 [data-testid="stFileUploadDropzone"] {
-    background-color: rgba(0, 169, 255, 0.05);
-    border: 2px dashed #00A9FF;
-    border-radius: 12px;
-    transition: all 0.3s ease-in-out;
+    background-color: #111827;
+    border: 1px dashed #374151;
+    border-radius: 4px;
+    transition: all 0.2s ease;
 }
 [data-testid="stFileUploadDropzone"]:hover {
-    background-color: rgba(0, 169, 255, 0.15);
-    border-color: #0082c8;
+    background-color: #1f2937;
+    border-color: #60a5fa;
 }
 
-/* Premium DataFrames */
+/* Clean DataFrames */
 .stDataFrame {
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    border: 1px solid #1f2937;
 }
