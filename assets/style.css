@@ -1,50 +1,76 @@
-/* Hide default Streamlit branding */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+/* --- GLOBAL ANIMATIONS & THEME --- */
+@keyframes fadeIn {
+    0% { opacity: 0; transform: translateY(15px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
 
-/* Global Minimalist Dark Theme */
+@keyframes pulseRed {
+    0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.4); }
+    70% { box-shadow: 0 0 15px 10px rgba(211, 47, 47, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0); }
+}
+
+@keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+}
+
+#MainMenu, footer, header { visibility: hidden; }
+
 .stApp {
-    background-color: #0b0f19;
+    background-color: #06090e;
     color: #e2e8f0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Typography refinements */
 h1, h2, h3 {
-    font-weight: 400 !important;
-    letter-spacing: -0.5px;
-    color: #ffffff;
+    font-weight: 300 !important;
+    letter-spacing: 1px;
+    background: -webkit-linear-gradient(#ffffff, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
-/* High-End Metric Cards */
+/* --- AMBIENT METRIC CARDS --- */
 div[data-testid="metric-container"] {
-    background: #111827;
-    border: 1px solid #1f2937;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    border-radius: 4px;
-    padding: 20px;
-    transition: border-color 0.2s ease-in-out;
+    background: linear-gradient(145deg, #0f172a, #0b0f19);
+    border: 1px solid #1e293b;
+    border-top: 2px solid #3b82f6;
+    border-radius: 8px;
+    padding: 24px;
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+    transition: all 0.3s ease;
 }
 
 div[data-testid="metric-container"]:hover {
-    border-color: #3b82f6;
+    transform: translateY(-5px) scale(1.02);
+    border-top: 2px solid #60a5fa;
+    box-shadow: 0 15px 35px -5px rgba(59, 130, 246, 0.2);
 }
 
-/* Premium Drag and Drop Uploader */
+/* --- THE CRITICAL PULSE CARD --- */
+div[data-testid="metric-container"]:nth-child(2) {
+    border-top: 2px solid #ef4444;
+    animation: pulseRed 2s infinite;
+}
+
+/* --- UPLOADER DRAG ZONE --- */
 [data-testid="stFileUploadDropzone"] {
-    background-color: #111827;
-    border: 1px dashed #374151;
-    border-radius: 4px;
-    transition: all 0.2s ease;
+    background-color: #0f172a;
+    border: 1px dashed #475569;
+    border-radius: 8px;
+    transition: all 0.3s ease;
 }
 [data-testid="stFileUploadDropzone"]:hover {
-    background-color: #1f2937;
-    border-color: #60a5fa;
+    background-color: #1e293b;
+    border-color: #3b82f6;
+    box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1);
 }
 
-/* Clean DataFrames */
+/* --- CLEAN DATAFRAMES --- */
 .stDataFrame {
-    border-radius: 4px;
-    border: 1px solid #1f2937;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
