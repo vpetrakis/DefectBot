@@ -23,9 +23,11 @@ def process_uploaded_files(uploaded_files):
         try:
             file_ext = os.path.splitext(file.name)[1].lower()
             
-            # Dynamically handle Excel vs CSV
-            if file_ext in ['.xlsx', '.xls']:
-                temp_df = pd.read_excel(file, skiprows=4)
+            # Dynamically handle Excel vs CSV with explicit engines
+            if file_ext == '.xlsx':
+                temp_df = pd.read_excel(file, skiprows=4, engine='openpyxl')
+            elif file_ext == '.xls':
+                temp_df = pd.read_excel(file, skiprows=4, engine='xlrd')
             elif file_ext == '.csv':
                 temp_df = pd.read_csv(file, skiprows=4)
             else:
@@ -45,10 +47,18 @@ def process_uploaded_files(uploaded_files):
         return pd.DataFrame()
         
     master_df = pd.concat(df_list, ignore_index=True)
+    
+    # --- THE BULLETPROOF FIX ---
+    # Strip all leading/trailing whitespace from column headers
+    master_df.columns = master_df.columns.str.strip()
+    
     master_df.dropna(subset=['Case Reference', 'Case Description'], how='all', inplace=True)
     
-    master_df['Due Date'] = pd.to_datetime(master_df['Due Date'], errors='coerce')
-    master_df['Date of Initial Reporting'] = pd.to_datetime(master_df['Date of Initial Reporting'], errors='coerce')
+    # Safely convert dates if columns exist
+    if 'Due Date' in master_df.columns:
+        master_df['Due Date'] = pd.to_datetime(master_df['Due Date'], errors='coerce')
+    if 'Date of Initial Reporting' in master_df.columns:
+        master_df['Date of Initial Reporting'] = pd.to_datetime(master_df['Date of Initial Reporting'], errors='coerce')
     
     master_df = apply_fuzzy_logic(master_df)
     return master_df
@@ -57,7 +67,7 @@ def process_uploaded_files(uploaded_files):
 st.sidebar.title("DefectBot")
 
 uploaded_files = st.sidebar.file_uploader(
-    "Upload TEC-003 Status Logs", 
+    "Upload Status Logs", 
     type=['xlsx', 'xls', 'csv'], 
     accept_multiple_files=True,
     help="Drag and drop your Excel or CSV vessel export files here."
@@ -86,7 +96,11 @@ if page == "Global Fleet Dashboard":
     
     total_open = len(master_df)
     total_critical = len(master_df[master_df['Tag'] == 'CRITICAL'])
-    total_overdue = len(master_df[master_df['Condition'].str.contains('OVERDUE', na=False)])
+    
+    # Safely check condition column
+    total_overdue = 0
+    if 'Condition' in master_df.columns:
+        total_overdue = len(master_df[master_df['Condition'].str.contains('OVERDUE', na=False)])
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Open Defects", total_open)
@@ -110,7 +124,11 @@ if page == "Global Fleet Dashboard":
 
     with col_data:
         st.subheader("Critical Action Required")
-        critical_df = master_df[master_df['Tag'] == 'CRITICAL'][['Vessel', 'Case Description', 'Condition']]
+        cols_to_show = ['Vessel', 'Case Description']
+        if 'Condition' in master_df.columns:
+            cols_to_show.append('Condition')
+            
+        critical_df = master_df[master_df['Tag'] == 'CRITICAL'][cols_to_show]
         st.dataframe(critical_df, use_container_width=True, hide_index=True)
 
 # --- PAGE 2: VESSEL DEEP-DIVE ---
@@ -123,8 +141,14 @@ elif page == "Vessel Deep-Dive":
     vessel_data = master_df[master_df['Vessel'] == selected_vessel]
     
     st.write(f"### Active Case Log: {selected_vessel}")
+    
+    cols_to_show = ['Case Reference', 'Case Description']
+    if 'Date of Initial Reporting' in master_df.columns: cols_to_show.append('Date of Initial Reporting')
+    if 'Condition' in master_df.columns: cols_to_show.append('Condition')
+    cols_to_show.append('Tag')
+    
     st.dataframe(
-        vessel_data[['Case Reference', 'Case Description', 'Date of Initial Reporting', 'Condition', 'Tag']],
+        vessel_data[cols_to_show],
         use_container_width=True,
         hide_index=True
     )
@@ -146,7 +170,7 @@ elif page == "Dispensation Risk Simulator":
             risk_df, x="Risk Score (0-100)", y="Expected Loss ($)", color="Recommendation",
             hover_data=['Vessel', 'Description'], size_max=20, size="Risk Score (0-100)",
             template="plotly_dark", 
-            color_discrete_map={"🔴 DISP REQUIRED": "#D32F2F", "🟡 REVIEW": "#F57C00", "🟢 NO ACTION": "#388E3C"}
+            color_discrete_map={"DISP REQUIRED": "#D32F2F", "REVIEW": "#F57C00", "NO ACTION": "#388E3C"}
         )
         fig_risk.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_risk, use_container_width=True)
