@@ -23,43 +23,61 @@ def process_uploaded_files(uploaded_files):
         try:
             file_ext = os.path.splitext(file.name)[1].lower()
             
-            # Dynamically handle Excel vs CSV with explicit engines
-            if file_ext == '.xlsx':
-                temp_df = pd.read_excel(file, skiprows=4, engine='openpyxl')
-            elif file_ext == '.xls':
-                temp_df = pd.read_excel(file, skiprows=4, engine='xlrd')
+            # --- SCENARIO 1: MASTER EXCEL WORKBOOK (MULTI-SHEET) ---
+            if file_ext in ['.xlsx', '.xls']:
+                engine = 'openpyxl' if file_ext == '.xlsx' else 'xlrd'
+                
+                # 'sheet_name=None' reads ALL tabs simultaneously into a dictionary
+                all_sheets = pd.read_excel(file, sheet_name=None, skiprows=4, engine=engine)
+                
+                for sheet_name, temp_df in all_sheets.items():
+                    # Strip spaces from column headers to prevent KeyErrors
+                    temp_df.columns = temp_df.columns.astype(str).str.strip()
+                    
+                    # Security Check: Skip cover pages, menus, or empty sheets
+                    if 'Case Reference' not in temp_df.columns or 'Case Description' not in temp_df.columns:
+                        continue
+                    
+                    # Use the Excel Tab Name as the Vessel Name
+                    temp_df['Vessel'] = str(sheet_name).strip().upper()
+                    df_list.append(temp_df)
+                    
+            # --- SCENARIO 2: INDIVIDUAL CSV EXPORTS ---
             elif file_ext == '.csv':
                 temp_df = pd.read_csv(file, skiprows=4)
-            else:
-                continue
-            
-            filename = file.name
-            vessel_name = filename.split(' - ')[-1].replace('.csv', '').replace('.xlsx', '').replace('.xls', '').strip()
-            if not vessel_name or "TEC-003" in vessel_name:
-                vessel_name = "UNKNOWN_VESSEL"
+                temp_df.columns = temp_df.columns.astype(str).str.strip()
                 
-            temp_df['Vessel'] = vessel_name
-            df_list.append(temp_df)
+                if 'Case Reference' not in temp_df.columns or 'Case Description' not in temp_df.columns:
+                    continue
+                
+                # Extract vessel from CSV filename
+                filename = file.name
+                vessel_name = filename.split(' - ')[-1].replace('.csv', '').strip().upper()
+                if not vessel_name or "TEC-003" in vessel_name:
+                    vessel_name = "UNKNOWN_VESSEL"
+                    
+                temp_df['Vessel'] = vessel_name
+                df_list.append(temp_df)
+                
         except Exception as e:
             st.error(f"System Error parsing {file.name}: {e}")
             
+    # --- ASSEMBLE MASTER DATABASE ---
     if not df_list:
         return pd.DataFrame()
         
     master_df = pd.concat(df_list, ignore_index=True)
     
-    # --- THE BULLETPROOF FIX 1: Header Sanitization ---
-    # Strip all leading/trailing whitespace from column headers
-    master_df.columns = master_df.columns.str.strip()
-    
+    # Drop rows that are completely blank in both Reference and Description
     master_df.dropna(subset=['Case Reference', 'Case Description'], how='all', inplace=True)
     
-    # Safely convert dates if columns exist
+    # Safely convert dates to datetime objects
     if 'Due Date' in master_df.columns:
         master_df['Due Date'] = pd.to_datetime(master_df['Due Date'], errors='coerce')
     if 'Date of Initial Reporting' in master_df.columns:
         master_df['Date of Initial Reporting'] = pd.to_datetime(master_df['Date of Initial Reporting'], errors='coerce')
     
+    # Apply NLP Tagging
     master_df = apply_fuzzy_logic(master_df)
     return master_df
 
@@ -70,7 +88,7 @@ uploaded_files = st.sidebar.file_uploader(
     "Upload Status Logs", 
     type=['xlsx', 'xls', 'csv'], 
     accept_multiple_files=True,
-    help="Drag and drop your Excel or CSV vessel export files here."
+    help="Drag and drop your Excel master files or individual CSVs here."
 )
 
 st.sidebar.markdown("---")
@@ -83,11 +101,11 @@ if not uploaded_files:
     st.info("Awaiting Data: Please upload fleet export files via the sidebar to initialize the dashboard.")
     st.stop()
 
-with st.spinner("Compiling fleet data arrays..."):
+with st.spinner("Compiling fleet data arrays across all sheets..."):
     master_df = process_uploaded_files(uploaded_files)
 
 if master_df.empty:
-    st.error("Data Parse Failure: Uploaded files contained no valid defect metrics.")
+    st.error("Data Parse Failure: Uploaded files contained no valid defect metrics across any sheets.")
     st.stop()
 
 # --- PAGE 1: GLOBAL DASHBOARD ---
@@ -97,8 +115,7 @@ if page == "Global Fleet Dashboard":
     total_open = len(master_df)
     total_critical = len(master_df[master_df['Tag'] == 'CRITICAL'])
     
-    # --- THE BULLETPROOF FIX 2: Data Type Sanitization ---
-    # Safely check condition column by forcing it to a string and stripping NaNs
+    # Safely check condition column by forcing it to string (prevents Pandas AttributeError)
     total_overdue = 0
     if 'Condition' in master_df.columns:
         safe_condition = master_df['Condition'].fillna('').astype(str)
