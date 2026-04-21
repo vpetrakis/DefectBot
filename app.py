@@ -1,18 +1,19 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 from logic.fuzzy_engine import apply_fuzzy_logic
 from logic.risk_engine import run_risk_simulation
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="DefectsBot OS | Fleet Intelligence", page_icon="🚢", layout="wide")
+st.set_page_config(page_title="DefectBot | Fleet Intelligence", layout="wide")
 
 # --- LOAD CSS ---
 try:
     with open("assets/style.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
-    pass # Failsafe if CSS is missing
+    pass 
 
 # --- DATA INGESTION FUNCTION ---
 @st.cache_data(show_spinner=False)
@@ -20,20 +21,25 @@ def process_uploaded_files(uploaded_files):
     df_list = []
     for file in uploaded_files:
         try:
-            # Read CSV and skip the first 4 rows containing metadata
-            temp_df = pd.read_csv(file, skiprows=4)
+            file_ext = os.path.splitext(file.name)[1].lower()
             
-            # Extract Vessel name from the uploaded filename
-            # Example: "TEC-003 Defect Status Log 2026.xlsx - FALCON.csv" -> "FALCON"
+            # Dynamically handle Excel vs CSV
+            if file_ext in ['.xlsx', '.xls']:
+                temp_df = pd.read_excel(file, skiprows=4)
+            elif file_ext == '.csv':
+                temp_df = pd.read_csv(file, skiprows=4)
+            else:
+                continue
+            
             filename = file.name
-            vessel_name = filename.split(' - ')[-1].replace('.csv', '').strip()
+            vessel_name = filename.split(' - ')[-1].replace('.csv', '').replace('.xlsx', '').replace('.xls', '').strip()
             if not vessel_name or "TEC-003" in vessel_name:
                 vessel_name = "UNKNOWN_VESSEL"
                 
             temp_df['Vessel'] = vessel_name
             df_list.append(temp_df)
         except Exception as e:
-            st.error(f"Error processing {file.name}: {e}")
+            st.error(f"System Error parsing {file.name}: {e}")
             
     if not df_list:
         return pd.DataFrame()
@@ -41,88 +47,82 @@ def process_uploaded_files(uploaded_files):
     master_df = pd.concat(df_list, ignore_index=True)
     master_df.dropna(subset=['Case Reference', 'Case Description'], how='all', inplace=True)
     
-    # Format dates
     master_df['Due Date'] = pd.to_datetime(master_df['Due Date'], errors='coerce')
     master_df['Date of Initial Reporting'] = pd.to_datetime(master_df['Date of Initial Reporting'], errors='coerce')
     
-    # Apply logic engine
     master_df = apply_fuzzy_logic(master_df)
     return master_df
 
 # --- SIDEBAR & UPLOADER ---
-st.sidebar.title("DefectsBot OS 🚢")
+st.sidebar.title("DefectBot")
 
-# The Drag and Drop Zone
 uploaded_files = st.sidebar.file_uploader(
-    "Upload TEC-003 CSV Files", 
-    type=['csv'], 
+    "Upload TEC-003 Status Logs", 
+    type=['xlsx', 'xls', 'csv'], 
     accept_multiple_files=True,
-    help="Drag and drop your vessel export CSVs here."
+    help="Drag and drop your Excel or CSV vessel export files here."
 )
 
 st.sidebar.markdown("---")
-page = st.sidebar.radio("Navigation", ["Global Fleet Dashboard", "Vessel Deep-Dive", "Dispensation Risk Simulator"])
+page = st.sidebar.radio("Module Navigation", ["Global Fleet Dashboard", "Vessel Deep-Dive", "Dispensation Risk Simulator"])
 st.sidebar.markdown("---")
 
 # --- INITIAL STATE CHECK ---
 if not uploaded_files:
-    st.title("Welcome to DefectsBot OS")
-    st.info("👈 Please drag and drop your exported Vessel CSV files into the sidebar to initialize the dashboard.")
+    st.title("DefectBot Intelligence")
+    st.info("Awaiting Data: Please upload fleet export files via the sidebar to initialize the dashboard.")
     st.stop()
 
-# Process files if uploaded
-with st.spinner("Aggregating fleet data..."):
+with st.spinner("Compiling fleet data arrays..."):
     master_df = process_uploaded_files(uploaded_files)
 
 if master_df.empty:
-    st.error("Uploaded files contained no valid defect data. Please check the format.")
+    st.error("Data Parse Failure: Uploaded files contained no valid defect metrics.")
     st.stop()
 
 # --- PAGE 1: GLOBAL DASHBOARD ---
 if page == "Global Fleet Dashboard":
-    st.title("🌐 Global Fleet Intelligence")
+    st.title("Global Fleet Intelligence")
     
-    # Top-Level Metrics
     total_open = len(master_df)
     total_critical = len(master_df[master_df['Tag'] == 'CRITICAL'])
     total_overdue = len(master_df[master_df['Condition'].str.contains('OVERDUE', na=False)])
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Open Defects", total_open)
-    col2.metric("Critical Priority", total_critical, delta="Requires Attention", delta_color="inverse")
-    col3.metric("Overdue Items", total_overdue, delta="Breach", delta_color="inverse")
+    col2.metric("Critical Priority", total_critical)
+    col3.metric("Overdue Items", total_overdue)
     col4.metric("Active Vessels", master_df['Vessel'].nunique())
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Visualizations & Triage
     col_chart, col_data = st.columns([1.2, 1])
     
     with col_chart:
-        st.subheader("Defect Volume by Vessel")
+        st.subheader("Defect Volume Distribution")
         fig = px.histogram(
             master_df, x="Vessel", color="Tag", 
-            color_discrete_map={"CRITICAL": "#FF4B4B", "NON-CRITICAL": "#00A9FF"},
+            color_discrete_map={"CRITICAL": "#D32F2F", "NON-CRITICAL": "#1976D2"},
             template="plotly_dark", barmode="group"
         )
         fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
 
     with col_data:
-        st.subheader("🚨 Critical Action Items")
+        st.subheader("Critical Action Required")
         critical_df = master_df[master_df['Tag'] == 'CRITICAL'][['Vessel', 'Case Description', 'Condition']]
         st.dataframe(critical_df, use_container_width=True, hide_index=True)
 
 # --- PAGE 2: VESSEL DEEP-DIVE ---
 elif page == "Vessel Deep-Dive":
-    st.title("⚓ Vessel Operations View")
+    st.title("Vessel Operations View")
     
     vessels = sorted(master_df['Vessel'].unique().tolist())
-    selected_vessel = st.selectbox("Select Vessel", vessels)
+    selected_vessel = st.selectbox("Select Asset", vessels)
     
     vessel_data = master_df[master_df['Vessel'] == selected_vessel]
     
-    st.write(f"### Live Roster: {selected_vessel}")
+    st.write(f"### Active Case Log: {selected_vessel}")
     st.dataframe(
         vessel_data[['Case Reference', 'Case Description', 'Date of Initial Reporting', 'Condition', 'Tag']],
         use_container_width=True,
@@ -131,12 +131,12 @@ elif page == "Vessel Deep-Dive":
 
 # --- PAGE 3: RISK SIMULATOR ---
 elif page == "Dispensation Risk Simulator":
-    st.title("🎲 Stochastic Risk Engine")
-    st.caption("Running algorithmic Monte Carlo simulations on defects missing due dates.")
+    st.title("Stochastic Risk Engine")
+    st.caption("Executing algorithmic Monte Carlo simulations on defects without established due dates.")
     
-    with st.expander("⚙️ Simulation Settings", expanded=False):
+    with st.expander("Simulation Parameters", expanded=False):
         sims = st.slider("Monte Carlo Iterations", min_value=1000, max_value=10000, value=5000, step=1000)
-        disp_cost = st.number_input("Base Dispensation Cost ($)", value=250)
+        disp_cost = st.number_input("Base Dispensation Cost (USD)", value=250)
     
     with st.spinner('Computing matrix logic...'):
         risk_df = run_risk_simulation(master_df, simulations=sims, disp_cost=disp_cost)
@@ -146,11 +146,11 @@ elif page == "Dispensation Risk Simulator":
             risk_df, x="Risk Score (0-100)", y="Expected Loss ($)", color="Recommendation",
             hover_data=['Vessel', 'Description'], size_max=20, size="Risk Score (0-100)",
             template="plotly_dark", 
-            color_discrete_map={"🔴 DISP REQUIRED": "#FF4B4B", "🟡 REVIEW": "#FFA500", "🟢 NO ACTION": "#00CC96"}
+            color_discrete_map={"🔴 DISP REQUIRED": "#D32F2F", "🟡 REVIEW": "#F57C00", "🟢 NO ACTION": "#388E3C"}
         )
         fig_risk.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_risk, use_container_width=True)
         
         st.dataframe(risk_df, use_container_width=True, hide_index=True)
     else:
-        st.success("✅ All logged defects currently have assigned due dates. System risk profile is minimal.")
+        st.success("All logged defects currently possess assigned due dates. System risk profile is minimal.")
