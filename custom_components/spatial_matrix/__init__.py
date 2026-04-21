@@ -1,19 +1,11 @@
-import streamlit.components.v1 as components
 import os
+import streamlit.components.v1 as components
 
-# Find the compiled React build folder
-_RELEASE = True
-if _RELEASE:
-    parent_dir = os.path.dirname(os.path.abspath(__file__))
-    build_dir = os.path.join(parent_dir, "frontend/build")
-    _spatial_matrix = components.declare_component("spatial_matrix", path=build_dir)
-else:
-    # Used for local development hot-reloading
-    _spatial_matrix = components.declare_component("spatial_matrix", url="http://localhost:3001")
+# When deploying, this looks for the compiled React build folder
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+build_dir = os.path.join(parent_dir, "frontend/build")
+_spatial_matrix = components.declare_component("spatial_matrix", path=build_dir)
 
-# The function you will call in app.py
 def spatial_risk_matrix(data_json, key=None):
-    # This sends data to React, and waits for React to send data back
-    component_value = _spatial_matrix(data=data_json, key=key, default=None)
-    return component_value
-
+    """Sends JSON to React, returns user clicks back to Python."""
+    return _spatial_matrix(data=data_json, key=key, default=None)
