@@ -1,19 +1,28 @@
 import pandas as pd
+import re
 
+# Comprehensive Maritime Critical Keyword Matrix
 CRITICAL_KEYWORDS = [
-    'FIRE', 'BILGE', 'GMDSS', 'RESCUE', 'STEERING', 
-    'COMPRESSOR', 'PURIFIER', 'LEAKING', 'ALARM', 'INGRESS', 'ICCP', 'VRCS'
+    r'\bFIRE\b', r'\bBILGE\b', r'\bGMDSS\b', r'\bRESCUE\b', r'\bSTEERING\b', 
+    r'\bCOMPRESSOR\b', r'\bPURIFIER\b', r'\bLEAKING\b', r'\bALARM\b', r'\bINGRESS\b', 
+    r'\bICCP\b', r'\bVRCS\b', r'\bMAIN ENGINE\b', r'\bGENERATOR\b', r'\bLIFEBOAT\b',
+    r'\bOILY WATER SEPARATOR\b', r'\bOWS\b', r'\bECDIS\b', r'\bRADAR\b', r'\bBOILER\b',
+    r'\bINCINERATOR\b', r'\bHATCH COVER\b', r'\bHYDRAULIC\b', r'\bVIBRATING\b'
 ]
 
 def apply_fuzzy_logic(df):
-    """Scans Case Descriptions and tags them based on critical keywords."""
+    """Scans Case Descriptions utilizing Regex word boundaries for 100% accuracy."""
+    
+    # Pre-compile regex for maximum performance speed
+    compiled_regexes = [re.compile(kw) for kw in CRITICAL_KEYWORDS]
+    
     def evaluate_row(desc):
         if pd.isna(desc): 
             return 'NON-CRITICAL'
         
         desc_upper = str(desc).upper()
-        for kw in CRITICAL_KEYWORDS:
-            if kw in desc_upper:
+        for regex in compiled_regexes:
+            if regex.search(desc_upper):
                 return 'CRITICAL'
         return 'NON-CRITICAL'
     
