@@ -17,7 +17,7 @@ try:
 except FileNotFoundError:
     pass 
 
-# --- DATA INGESTION & VALIDATION ENGINE ---
+# --- DYNAMIC INGESTION & VALIDATION ENGINE ---
 @st.cache_data(show_spinner=False)
 def process_uploaded_files(uploaded_files):
     df_list = []
@@ -29,44 +29,82 @@ def process_uploaded_files(uploaded_files):
             
             if file_ext in ['.xlsx', '.xls']:
                 engine = 'openpyxl' if file_ext == '.xlsx' else 'xlrd'
-                all_sheets = pd.read_excel(file, sheet_name=None, skiprows=4, engine=engine)
                 
-                for sheet_name, temp_df in all_sheets.items():
-                    temp_df.columns = temp_df.columns.astype(str).str.strip()
+                # Load raw without skipping rows to dynamically hunt for headers
+                all_sheets = pd.read_excel(file, sheet_name=None, header=None, engine=engine)
+                
+                for sheet_name, raw_df in all_sheets.items():
+                    vessel_name = str(sheet_name).strip().upper()
                     
-                    if 'Case Reference' not in temp_df.columns or 'Case Description' not in temp_df.columns:
+                    if raw_df.empty:
+                        integrity_log.append({"Vessel": vessel_name, "Status": "SKIPPED: Blank Sheet", "Rows Extracted": 0})
+                        continue
+                        
+                    # --- HUNTER-SEEKER ALGORITHM ---
+                    # Scan the first 20 rows to find the actual table header
+                    header_row = -1
+                    for idx, row in raw_df.head(20).iterrows():
+                        row_str = ' '.join(row.astype(str).str.upper())
+                        if 'CASE REF' in row_str and 'DESC' in row_str:
+                            header_row = idx
+                            break
+                            
+                    if header_row == -1:
+                        integrity_log.append({"Vessel": vessel_name, "Status": "SKIPPED: No Defect Table Found", "Rows Extracted": 0})
+                        continue
+                        
+                    # Reconstruct DataFrame precisely from the located header
+                    temp_df = raw_df.iloc[header_row + 1:].copy()
+                    temp_df.columns = raw_df.iloc[header_row].astype(str).str.strip()
+                    
+                    # Fuzzy Column Mapping (Immune to slight misspellings or spaces)
+                    ref_col = next((c for c in temp_df.columns if 'CASE REF' in c.upper()), None)
+                    desc_col = next((c for c in temp_df.columns if 'DESC' in c.upper()), None)
+                    
+                    if not ref_col or not desc_col:
+                        integrity_log.append({"Vessel": vessel_name, "Status": "SKIPPED: Corrupted Columns", "Rows Extracted": 0})
+                        continue
+                        
+                    # Standardize names for the master system
+                    temp_df.rename(columns={ref_col: 'Case Reference', desc_col: 'Case Description'}, inplace=True)
+                    
+                    date_col = next((c for c in temp_df.columns if 'DUE DATE' in c.upper()), None)
+                    if date_col: temp_df.rename(columns={date_col: 'Due Date'}, inplace=True)
+                    
+                    cond_col = next((c for c in temp_df.columns if 'COND' in c.upper()), None)
+                    if cond_col: temp_df.rename(columns={cond_col: 'Condition'}, inplace=True)
+                    
+                    init_date_col = next((c for c in temp_df.columns if 'INITIAL' in c.upper() and 'DATE' in c.upper()), None)
+                    if init_date_col: temp_df.rename(columns={init_date_col: 'Date of Initial Reporting'}, inplace=True)
+                    
+                    # Drop rows that don't actually contain a description
+                    temp_df.dropna(subset=['Case Description'], inplace=True)
+                    if temp_df.empty:
+                        integrity_log.append({"Vessel": vessel_name, "Status": "SKIPPED: Table empty of descriptions", "Rows Extracted": 0})
                         continue
                     
-                    temp_df.dropna(subset=['Case Description'], inplace=True)
-                    if temp_df.empty: continue
-                    
-                    vessel_name = str(sheet_name).strip().upper()
                     temp_df['Vessel'] = vessel_name
                     df_list.append(temp_df)
-                    integrity_log.append({"Vessel": vessel_name, "Rows Processed": len(temp_df), "Source": "Master Matrix"})
+                    integrity_log.append({"Vessel": vessel_name, "Status": "SUCCESS: Active Data", "Rows Extracted": len(temp_df)})
                     
             elif file_ext == '.csv':
+                # Similar dynamic hunting logic can be applied, but CSVs are usually flat.
+                # Kept standard for CSV fallback.
                 temp_df = pd.read_csv(file, skiprows=4)
                 temp_df.columns = temp_df.columns.astype(str).str.strip()
-                
-                if 'Case Reference' not in temp_df.columns or 'Case Description' not in temp_df.columns:
-                    continue
-                
-                temp_df.dropna(subset=['Case Description'], inplace=True)
-                if temp_df.empty: continue
-                
-                vessel_name = file.name.split(' - ')[-1].replace('.csv', '').strip().upper()
-                if not vessel_name or "TEC-003" in vessel_name: vessel_name = "UNKNOWN"
-                    
-                temp_df['Vessel'] = vessel_name
-                df_list.append(temp_df)
-                integrity_log.append({"Vessel": vessel_name, "Rows Processed": len(temp_df), "Source": "CSV Node"})
+                if 'Case Reference' in temp_df.columns and 'Case Description' in temp_df.columns:
+                    temp_df.dropna(subset=['Case Description'], inplace=True)
+                    vessel_name = file.name.split(' - ')[-1].replace('.csv', '').strip().upper()
+                    if not vessel_name or "TEC-003" in vessel_name: vessel_name = "UNKNOWN"
+                    temp_df['Vessel'] = vessel_name
+                    df_list.append(temp_df)
+                    integrity_log.append({"Vessel": vessel_name, "Status": "SUCCESS: Active Data (CSV)", "Rows Extracted": len(temp_df)})
                 
         except Exception as e:
             st.error(f"CRITICAL FAULT parsing {file.name}: {e}")
             
     if not df_list:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(integrity_log)
         
     master_df = pd.concat(df_list, ignore_index=True)
     
@@ -109,11 +147,13 @@ if not uploaded_files:
     st.markdown("<p style='text-align: center; color: #64748b;'>Establish connection by uploading fleet matrix to the secure node.</p>", unsafe_allow_html=True)
     st.stop()
 
-with st.spinner("COMPILING MATRICES..."):
+with st.spinner("EXECUTING HUNTER-SEEKER INGESTION..."):
     master_df, integrity_df = process_uploaded_files(uploaded_files)
 
 if master_df.empty:
-    st.error("FAULT: ZERO VALID METRICS DETECTED.")
+    st.error("FAULT: ZERO VALID METRICS DETECTED. CHECK INTEGRITY LOG.")
+    if not integrity_df.empty:
+        st.dataframe(integrity_df, use_container_width=True)
     st.stop()
 
 # --- MODULE 1: GLOBAL COMMAND ---
@@ -136,7 +176,6 @@ if page == "/// GLOBAL COMMAND":
     
     with col_chart:
         st.markdown("<p style='color: #94a3b8; font-size: 0.9rem; letter-spacing: 1px;'>DISTRIBUTION MATRIX</p>", unsafe_allow_html=True)
-        # Cinematic Plotly Chart
         fig = px.bar(
             master_df.groupby(['Vessel', 'Tag']).size().reset_index(name='Count'),
             x="Vessel", y="Count", color="Tag",
@@ -173,7 +212,6 @@ elif page == "/// ASSET DEEP-DIVE":
     cols_to_show.append('True Condition')
     cols_to_show.append('Tag')
     
-    # Cinematic Row Highlighting (Applies subtle red background to critical rows)
     def cinematic_row_style(row):
         is_critical = str(row.get('Tag', '')) == 'CRITICAL'
         is_overdue = str(row.get('True Condition', '')) == 'OVERDUE'
@@ -185,7 +223,7 @@ elif page == "/// ASSET DEEP-DIVE":
     try:
         styled_df = styler.apply(cinematic_row_style, axis=1)
     except AttributeError:
-        styled_df = styler.apply(cinematic_row_style, axis=1)
+        styled_df = styler.applymap(cinematic_row_style, axis=1)
 
     st.dataframe(styled_df, use_container_width=True, hide_index=True, height=550)
 
@@ -204,7 +242,6 @@ elif page == "/// STOCHASTIC RISK":
     
     if not risk_df.empty:
         st.markdown("<br>", unsafe_allow_html=True)
-        # Cinematic Scatter Plot
         fig_risk = px.scatter(
             risk_df, x="Risk Score (0-100)", y="Expected Loss ($)", color="Recommendation",
             hover_data=['Vessel', 'Description'], size_max=25, size="Risk Score (0-100)",
@@ -227,13 +264,19 @@ elif page == "/// STOCHASTIC RISK":
 # --- MODULE 4: DATA INTEGRITY ---
 elif page == "/// INTEGRITY LOG":
     st.markdown("<h2>DATA INTEGRITY LEDGER</h2>", unsafe_allow_html=True)
-    st.caption("MATHEMATICAL PROOF OF FILE PARSING AND INGESTION.")
+    st.caption("MATHEMATICAL PROOF OF ALGORITHMIC INGESTION PER NODE.")
     
-    st.metric("TOTAL VECTORS PROCESSED", integrity_df['Rows Processed'].sum())
+    st.metric("TOTAL VECTORS PROCESSED", integrity_df['Rows Extracted'].sum())
     
-    # Styled as a terminal log
-    st.dataframe(
-        integrity_df.style.set_properties(**{'font-family': 'JetBrains Mono', 'color': '#10b981'}), 
-        use_container_width=True, 
-        hide_index=True
-    )
+    # Conditional formatting to show SUCCESS vs SKIPPED
+    def log_styler(row):
+        if 'SUCCESS' in str(row.get('Status', '')):
+            return ['color: #10b981; font-family: JetBrains Mono'] * len(row)
+        return ['color: #ef4444; font-family: JetBrains Mono; font-weight: bold'] * len(row)
+
+    try:
+        styled_log = integrity_df.style.apply(log_styler, axis=1)
+    except Exception:
+        styled_log = integrity_df
+        
+    st.dataframe(styled_log, use_container_width=True, hide_index=True, height=600)
