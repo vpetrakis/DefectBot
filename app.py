@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import os
 from logic.fuzzy_engine import apply_fuzzy_logic
 from logic.risk_engine import run_risk_simulation
@@ -16,13 +15,13 @@ footer { visibility: hidden; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #020617; }
 ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
-.stApp { background-color: #020617 !important; color: #cbd5e1; font-family: 'Inter', sans-serif; }
+.stApp { background-color: #020617 !important; background: radial-gradient(circle at 50% -20%, #0f172a 0%, #020617 100%) !important; color: #cbd5e1; font-family: 'Inter', sans-serif; }
 h1, h2, h3 { font-weight: 300 !important; letter-spacing: 2px; background: linear-gradient(90deg, #f8fafc 0%, #94a3b8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase; }
 .block-container { opacity: 1; animation: smoothEntry 0.8s forwards; }
 @keyframes smoothEntry { 0% { transform: translateY(15px); opacity: 0.1; } 100% { transform: translateY(0); opacity: 1; } }
-div[data-testid="metric-container"] { background: rgba(15, 23, 42, 0.4); border-top: 2px solid #0ea5e9; border-radius: 8px; padding: 24px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5); }
+div[data-testid="metric-container"] { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); border-top: 2px solid #0ea5e9; border-radius: 8px; padding: 24px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5); }
 div[data-testid="metric-container"]:nth-child(2) { border-top: 2px solid #ef4444; }
-.stDataFrame { border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05); }
+.stDataFrame { border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.6); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -53,6 +52,8 @@ def process_uploaded_files(uploaded_files):
                     temp_df.rename(columns={ref_col: 'Case Reference', desc_col: 'Case Description'}, inplace=True)
                     date_col = next((c for c in temp_df.columns if 'DUE DATE' in str(c).upper()), None)
                     if date_col: temp_df.rename(columns={date_col: 'Due Date'}, inplace=True)
+                    init_date_col = next((c for c in temp_df.columns if 'INITIAL' in str(c).upper() and 'DATE' in str(c).upper()), None)
+                    if init_date_col: temp_df.rename(columns={init_date_col: 'Date of Initial Reporting'}, inplace=True)
                     temp_df.dropna(subset=['Case Description'], inplace=True)
                     if temp_df.empty: continue
                     temp_df['Vessel'] = vessel_name
@@ -67,6 +68,8 @@ def process_uploaded_files(uploaded_files):
         master_df['True Condition'] = 'PENDING'
         master_df.loc[master_df['Due Date'] < today, 'True Condition'] = 'OVERDUE'
     else: master_df['True Condition'] = 'UNKNOWN'
+    if 'Date of Initial Reporting' in master_df.columns:
+        master_df['Date of Initial Reporting'] = pd.to_datetime(master_df['Date of Initial Reporting'], errors='coerce')
     master_df = apply_fuzzy_logic(master_df)
     return master_df, pd.DataFrame(integrity_log)
 
@@ -74,7 +77,9 @@ st.sidebar.markdown("<h3>DEFECTBOT // OS</h3>", unsafe_allow_html=True)
 uploaded_files = st.sidebar.file_uploader("UPLOAD TELEMETRY DATA", type=['xlsx', 'csv'], accept_multiple_files=True)
 page = st.sidebar.radio("COMMAND MODULES", ["/// OVERVIEW", "/// ASSET DEEP-DIVE", "/// REACT SPATIAL MATRIX"])
 
-if not uploaded_files: st.stop()
+if not uploaded_files:
+    st.markdown("<h1 style='text-align: center; margin-top: 15vh;'>AWAITING TELEMETRY</h1>", unsafe_allow_html=True)
+    st.stop()
 master_df, _ = process_uploaded_files(uploaded_files)
 
 if page == "/// OVERVIEW":
@@ -85,6 +90,7 @@ if page == "/// OVERVIEW":
     st.dataframe(master_df[['Vessel', 'Case Reference', 'Case Description', 'Tag']], use_container_width=True)
 
 elif page == "/// ASSET DEEP-DIVE":
+    st.markdown("<h2>ASSET OPERATIONS</h2>", unsafe_allow_html=True)
     vessels = sorted(master_df['Vessel'].unique().tolist())
     selected = st.selectbox("SELECT ASSET", vessels)
     st.dataframe(master_df[master_df['Vessel'] == selected], use_container_width=True)
@@ -104,4 +110,4 @@ elif page == "/// REACT SPATIAL MATRIX":
         
         # Bi-Directional Response: Python reacting to React!
         if user_action and user_action.get('action') == 'inspect':
-            st.warning(f" OS COMMAND INTERCEPTED: Superintendent requesting deep inspection of {user_action['vessel']} (Ref: {user_action['ref']}).")
+            st.warning(f"🚨 OS COMMAND INTERCEPTED: Superintendent requesting deep inspection of {user_action['vessel']} (Ref: {user_action['ref']}).")
