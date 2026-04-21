@@ -43,7 +43,7 @@ def run_risk_simulation(df, simulations=5000):
         risk_score = min(100, int((expected_loss / (base_cost * 0.6)) * 100))
         
         results.append({
-            'id': str(row['Case Reference']), # Required for React keys
+            'id': str(row['Case Reference']), # Required unique key for React
             'Vessel': row.get('Vessel', 'Unknown'),
             'Case Ref': row['Case Reference'],
             'Description': row['Case Description'],
