@@ -48,7 +48,7 @@ def process_uploaded_files(uploaded_files):
         
     master_df = pd.concat(df_list, ignore_index=True)
     
-    # --- THE BULLETPROOF FIX ---
+    # --- THE BULLETPROOF FIX 1: Header Sanitization ---
     # Strip all leading/trailing whitespace from column headers
     master_df.columns = master_df.columns.str.strip()
     
@@ -97,10 +97,12 @@ if page == "Global Fleet Dashboard":
     total_open = len(master_df)
     total_critical = len(master_df[master_df['Tag'] == 'CRITICAL'])
     
-    # Safely check condition column
+    # --- THE BULLETPROOF FIX 2: Data Type Sanitization ---
+    # Safely check condition column by forcing it to a string and stripping NaNs
     total_overdue = 0
     if 'Condition' in master_df.columns:
-        total_overdue = len(master_df[master_df['Condition'].str.contains('OVERDUE', na=False)])
+        safe_condition = master_df['Condition'].fillna('').astype(str)
+        total_overdue = len(master_df[safe_condition.str.contains('OVERDUE', case=False, na=False)])
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Open Defects", total_open)
