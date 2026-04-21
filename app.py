@@ -40,11 +40,12 @@ def process_uploaded_files(uploaded_files):
                         integrity_log.append({"Vessel": vessel_name, "Status": "SKIPPED: Blank Sheet", "Rows Extracted": 0})
                         continue
                         
-                    # --- HUNTER-SEEKER ALGORITHM ---
+                    # --- PATCHED HUNTER-SEEKER ALGORITHM ---
                     # Scan the first 20 rows to find the actual table header
                     header_row = -1
                     for idx, row in raw_df.head(20).iterrows():
-                        row_str = ' '.join(row.astype(str).str.upper())
+                        # Strict Python list-comprehension safely forces all NaNs/Floats to Strings
+                        row_str = ' '.join([str(val).upper() for val in row.values])
                         if 'CASE REF' in row_str and 'DESC' in row_str:
                             header_row = idx
                             break
@@ -55,11 +56,13 @@ def process_uploaded_files(uploaded_files):
                         
                     # Reconstruct DataFrame precisely from the located header
                     temp_df = raw_df.iloc[header_row + 1:].copy()
-                    temp_df.columns = raw_df.iloc[header_row].astype(str).str.strip()
+                    
+                    # Safely convert the detected header row into string column names
+                    temp_df.columns = [str(c).strip() for c in raw_df.iloc[header_row].values]
                     
                     # Fuzzy Column Mapping (Immune to slight misspellings or spaces)
-                    ref_col = next((c for c in temp_df.columns if 'CASE REF' in c.upper()), None)
-                    desc_col = next((c for c in temp_df.columns if 'DESC' in c.upper()), None)
+                    ref_col = next((c for c in temp_df.columns if 'CASE REF' in str(c).upper()), None)
+                    desc_col = next((c for c in temp_df.columns if 'DESC' in str(c).upper()), None)
                     
                     if not ref_col or not desc_col:
                         integrity_log.append({"Vessel": vessel_name, "Status": "SKIPPED: Corrupted Columns", "Rows Extracted": 0})
@@ -68,13 +71,13 @@ def process_uploaded_files(uploaded_files):
                     # Standardize names for the master system
                     temp_df.rename(columns={ref_col: 'Case Reference', desc_col: 'Case Description'}, inplace=True)
                     
-                    date_col = next((c for c in temp_df.columns if 'DUE DATE' in c.upper()), None)
+                    date_col = next((c for c in temp_df.columns if 'DUE DATE' in str(c).upper()), None)
                     if date_col: temp_df.rename(columns={date_col: 'Due Date'}, inplace=True)
                     
-                    cond_col = next((c for c in temp_df.columns if 'COND' in c.upper()), None)
+                    cond_col = next((c for c in temp_df.columns if 'COND' in str(c).upper()), None)
                     if cond_col: temp_df.rename(columns={cond_col: 'Condition'}, inplace=True)
                     
-                    init_date_col = next((c for c in temp_df.columns if 'INITIAL' in c.upper() and 'DATE' in c.upper()), None)
+                    init_date_col = next((c for c in temp_df.columns if 'INITIAL' in str(c).upper() and 'DATE' in str(c).upper()), None)
                     if init_date_col: temp_df.rename(columns={init_date_col: 'Date of Initial Reporting'}, inplace=True)
                     
                     # Drop rows that don't actually contain a description
@@ -88,10 +91,9 @@ def process_uploaded_files(uploaded_files):
                     integrity_log.append({"Vessel": vessel_name, "Status": "SUCCESS: Active Data", "Rows Extracted": len(temp_df)})
                     
             elif file_ext == '.csv':
-                # Similar dynamic hunting logic can be applied, but CSVs are usually flat.
-                # Kept standard for CSV fallback.
                 temp_df = pd.read_csv(file, skiprows=4)
-                temp_df.columns = temp_df.columns.astype(str).str.strip()
+                temp_df.columns = [str(c).strip() for c in temp_df.columns]
+                
                 if 'Case Reference' in temp_df.columns and 'Case Description' in temp_df.columns:
                     temp_df.dropna(subset=['Case Description'], inplace=True)
                     vessel_name = file.name.split(' - ')[-1].replace('.csv', '').strip().upper()
@@ -268,7 +270,6 @@ elif page == "/// INTEGRITY LOG":
     
     st.metric("TOTAL VECTORS PROCESSED", integrity_df['Rows Extracted'].sum())
     
-    # Conditional formatting to show SUCCESS vs SKIPPED
     def log_styler(row):
         if 'SUCCESS' in str(row.get('Status', '')):
             return ['color: #10b981; font-family: JetBrains Mono'] * len(row)
