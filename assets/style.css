@@ -1,88 +1,98 @@
+/* --- EXTERNAL TYPOGRAPHY --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-#MainMenu, footer, header { visibility: hidden; }
+/* --- SAFE UI HIDING (Prevents DOM crashes) --- */
+[data-testid="stHeader"] { background-color: transparent !important; }
+footer { visibility: hidden; }
 
+/* --- VOLUMETRIC SCROLLBARS --- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #020617; }
 ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
 
-/* Cinematic Base with CRT Scanline Overlay */
+/* --- CINEMATIC GLOBAL THEME --- */
 .stApp {
-    background: radial-gradient(circle at 50% -20%, #0f172a 0%, #020617 100%);
+    background: radial-gradient(circle at 50% -20%, #0f172a 0%, #020617 100%) !important;
+    background-color: #020617 !important;
     color: #cbd5e1;
     font-family: 'Inter', sans-serif;
-    position: relative;
 }
 
-.stApp::before {
-    content: " ";
-    display: block;
-    position: absolute;
-    top: 0; left: 0; bottom: 0; right: 0;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-    z-index: 2;
-    background-size: 100% 2px, 3px 100%;
-    pointer-events: none;
-}
-
+/* --- HIERARCHICAL TYPOGRAPHY --- */
 h1, h2, h3 {
     font-weight: 300 !important;
-    letter-spacing: 3px;
-    background: linear-gradient(90deg, #f8fafc 0%, #64748b 100%);
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #f8fafc 0%, #94a3b8 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     text-transform: uppercase;
 }
 
-@keyframes slideUpFade {
-    0% { opacity: 0; transform: translateY(20px); }
-    100% { opacity: 1; transform: translateY(0); }
+/* --- FAIL-SAFE ANIMATION CHOREOGRAPHY --- */
+@keyframes smoothEntry {
+    0% { transform: translateY(15px); opacity: 0.1; }
+    100% { transform: translateY(0); opacity: 1; }
 }
 
 @keyframes criticalPulse {
-    0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.3); }
-    70% { box-shadow: 0 0 25px 10px rgba(220, 38, 38, 0); }
+    0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    70% { box-shadow: 0 0 25px 8px rgba(220, 38, 38, 0); }
     100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }
 
+/* Applied safely to the main view container */
 .block-container {
-    animation: slideUpFade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    z-index: 10;
+    opacity: 1; /* Failsafe default */
+    animation: smoothEntry 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Glassmorphism Metric Cards */
+/* --- GLASSMORPHISM DATA CARDS --- */
 div[data-testid="metric-container"] {
     background: rgba(15, 23, 42, 0.4);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     border-top: 2px solid #0ea5e9;
-    border-radius: 4px;
+    border-radius: 8px;
     padding: 24px;
-    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.6);
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 div[data-testid="metric-container"]:hover {
     transform: translateY(-4px);
     border-top: 2px solid #38bdf8;
-    background: rgba(15, 23, 42, 0.7);
+    background: rgba(15, 23, 42, 0.6);
+    box-shadow: 0 15px 40px -5px rgba(56, 189, 248, 0.2);
 }
 
-/* The Threat Pulse */
+/* CRITICAL THREAT CARD */
 div[data-testid="metric-container"]:nth-child(2) {
     border-top: 2px solid #ef4444;
-    animation: criticalPulse 3s infinite;
+    animation: criticalPulse 2.5s infinite;
+}
+div[data-testid="metric-container"]:nth-child(2):hover {
+    border-top: 2px solid #f87171;
+    box-shadow: 0 15px 40px -5px rgba(239, 68, 68, 0.3);
 }
 
+/* --- PREMIUM DROPZONE --- */
 [data-testid="stFileUploadDropzone"] {
-    background: rgba(15, 23, 42, 0.2);
-    border: 1px dashed rgba(56, 189, 248, 0.2);
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px dashed rgba(56, 189, 248, 0.3);
+    border-radius: 8px;
     transition: all 0.3s ease;
 }
+[data-testid="stFileUploadDropzone"]:hover {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: #38bdf8;
+    box-shadow: inset 0 0 30px rgba(56, 189, 248, 0.15);
+}
 
+/* --- ZERO-UI DATAFRAMES --- */
 .stDataFrame {
-    border-radius: 4px;
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.6);
 }
