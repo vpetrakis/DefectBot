@@ -1,51 +1,74 @@
 import numpy as np
 import pandas as pd
+from textblob import TextBlob
+
+def get_sentiment_multiplier(text):
+    """Analyzes the panic/urgency in the crew's textual description."""
+    try:
+        polarity = TextBlob(str(text)).sentiment.polarity
+        if polarity < -0.3: return 1.35  # Highly negative/urgent phrasing
+        if polarity < 0.0: return 1.15   # Mildly negative
+        return 1.0                       # Neutral/Objective
+    except:
+        return 1.0
 
 def get_equipment_risk_profile(description):
-    """Dynamically assigns failure probabilities and baseline costs based on NLP context."""
+    """Dynamic mechanical profiling."""
     desc = str(description).upper()
-    
     if any(kw in desc for kw in ['ENGINE', 'PROPULSION', 'GENERATOR', 'STEERING', 'BOILER']):
-        return 0.35, 120000  # High exposure, catastrophic cost
+        return 0.35, 150000 
     elif any(kw in desc for kw in ['FIRE', 'RESCUE', 'LIFEBOAT', 'GMDSS', 'ECDIS']):
-        return 0.40, 80000   # Critical safety, severe port state risk
+        return 0.45, 95000   
     elif any(kw in desc for kw in ['PUMP', 'COMPRESSOR', 'PURIFIER', 'VALVE', 'OWS']):
-        return 0.20, 35000   # Standard operational machinery
+        return 0.25, 45000   
     elif any(kw in desc for kw in ['GALLEY', 'CABIN', 'LAUNDRY', 'AC', 'LIGHTING']):
-        return 0.05, 5000    # Low impact hotel services
+        return 0.05, 5000    
     else:
-        return 0.15, 25000   # Fleet standard baseline
+        return 0.15, 30000   
 
-def run_risk_simulation(df, simulations=5000, disp_cost=250):
-    """Vectorized Stochastic Monte Carlo Engine."""
-    if 'Due Date' not in df.columns:
+def run_risk_simulation(df, simulations=5000):
+    """Weibull Stochastic Monte Carlo with Temporal Decay & Sentiment Analysis."""
+    if 'Due Date' not in df.columns or 'Date of Initial Reporting' not in df.columns:
         return pd.DataFrame()
         
     nodue_df = df[df['Due Date'].isna()].copy()
     if nodue_df.empty:
         return pd.DataFrame()
         
+    today = pd.Timestamp('today').normalize()
     results = []
+    
     for _, row in nodue_df.iterrows():
-        # Fetch dynamic parameters instead of hardcoded numbers
         base_loc, base_cost = get_equipment_risk_profile(row['Case Description'])
         
-        # Execute Monte Carlo Matrix
-        base_risk_array = np.random.normal(loc=base_loc, scale=0.05, size=simulations)
-        base_risk_array = np.clip(base_risk_array, 0, 1) 
+        # Calculate Temporal Decay (Risk compounds 5% every 15 days open)
+        try:
+            days_open = max(0, (today - pd.to_datetime(row['Date of Initial Reporting'])).days)
+        except:
+            days_open = 0
+        time_multiplier = 1.0 + ((days_open / 15.0) * 0.05)
         
-        expected_loss = np.mean(base_risk_array) * base_cost
+        # Calculate AI Sentiment Multiplier
+        sentiment_multiplier = get_sentiment_multiplier(row['Case Description'])
         
-        # Normalize score
-        risk_score = min(100, int((expected_loss / (base_cost * 0.5)) * 100))
+        # Execute WEIBULL Matrix (Shape parameter 1.5 indicates mechanical wear-out)
+        weibull_array = np.random.weibull(a=1.5, size=simulations) * base_loc
+        weibull_array = np.clip(weibull_array, 0, 1)
+        
+        # Apply compounding modifiers
+        final_probability = np.mean(weibull_array) * time_multiplier * sentiment_multiplier
+        expected_loss = final_probability * base_cost
+        
+        risk_score = min(100, int((expected_loss / (base_cost * 0.6)) * 100))
         
         results.append({
             'Vessel': row.get('Vessel', 'Unknown'),
             'Case Ref': row['Case Reference'],
             'Description': row['Case Description'],
+            'Days Open': int(days_open),
             'Risk Score (0-100)': risk_score,
-            'Expected Loss ($)': f"${int(expected_loss):,}",
-            'Recommendation': 'DISP REQUIRED' if risk_score > 60 else ('REVIEW' if risk_score > 30 else 'NO ACTION')
+            'Expected Loss ($)': int(expected_loss),
+            'Recommendation': 'CRITICAL THREAT' if risk_score > 75 else ('DISP REQUIRED' if risk_score > 50 else 'MONITOR')
         })
         
     return pd.DataFrame(results).sort_values(by="Risk Score (0-100)", ascending=False)
