@@ -8,11 +8,98 @@ from logic.risk_engine import run_risk_simulation
 
 st.set_page_config(page_title="DEFECTBOT // OS", layout="wide", initial_sidebar_state="expanded")
 
-try:
-    with open("assets/style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    pass 
+# --- DIRECT CSS INJECTION (Bypasses Browser Caching) ---
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+[data-testid="stHeader"] { background-color: transparent !important; }
+footer { visibility: hidden; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #020617; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+
+.stApp {
+    background: radial-gradient(circle at 50% -20%, #0f172a 0%, #020617 100%) !important;
+    background-color: #020617 !important;
+    color: #cbd5e1;
+    font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3 {
+    font-weight: 300 !important;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #f8fafc 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-transform: uppercase;
+}
+
+@keyframes smoothEntry {
+    0% { transform: translateY(15px); opacity: 0.1; }
+    100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes criticalPulse {
+    0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    70% { box-shadow: 0 0 25px 8px rgba(220, 38, 38, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+.block-container {
+    opacity: 1; 
+    animation: smoothEntry 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+div[data-testid="metric-container"] {
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 2px solid #0ea5e9;
+    border-radius: 8px;
+    padding: 24px;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+div[data-testid="metric-container"]:hover {
+    transform: translateY(-4px);
+    border-top: 2px solid #38bdf8;
+    background: rgba(15, 23, 42, 0.6);
+    box-shadow: 0 15px 40px -5px rgba(56, 189, 248, 0.2);
+}
+
+div[data-testid="metric-container"]:nth-child(2) {
+    border-top: 2px solid #ef4444;
+    animation: criticalPulse 2.5s infinite;
+}
+div[data-testid="metric-container"]:nth-child(2):hover {
+    border-top: 2px solid #f87171;
+    box-shadow: 0 15px 40px -5px rgba(239, 68, 68, 0.3);
+}
+
+[data-testid="stFileUploadDropzone"] {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px dashed rgba(56, 189, 248, 0.3);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+[data-testid="stFileUploadDropzone"]:hover {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: #38bdf8;
+    box-shadow: inset 0 0 30px rgba(56, 189, 248, 0.15);
+}
+
+.stDataFrame {
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.6);
+}
+</style>
+""", unsafe_allow_html=True)
 
 @st.cache_data(show_spinner=False)
 def process_uploaded_files(uploaded_files):
@@ -172,7 +259,7 @@ elif page == "/// ASSET DEEP-DIVE":
     except: styled_df = vessel_data[cols_to_show].style.applymap(cinematic_row_style, axis=1)
     st.dataframe(styled_df, use_container_width=True, hide_index=True, height=550)
 
-# --- THE 3D SPATIAL RISK UPGRADE ---
+# --- THE 3D SPATIAL RISK UPGRADE (Now Crash-Proof) ---
 elif page == "/// SPATIAL RISK MATRIX":
     st.markdown("<h2>WEIBULL STOCHASTIC ENGINE</h2>", unsafe_allow_html=True)
     st.caption("EXECUTING TEMPORAL & SENTIMENT-MODIFIED MONTE CARLO PROJECTIONS IN 3D SPACE.")
@@ -185,10 +272,23 @@ elif page == "/// SPATIAL RISK MATRIX":
     
     if not risk_df.empty:
         st.markdown("<br>", unsafe_allow_html=True)
-        # Cinematic 3D Interactive Spatial Plot
+        
+        # --- BULLETPROOF DATA SANITIZATION ---
+        # Ensures that older risk_engine.py outputs (like strings) don't crash Plotly
+        if risk_df['Expected Loss ($)'].dtype == object:
+            risk_df['Expected Loss ($)'] = risk_df['Expected Loss ($)'].astype(str).str.replace('$', '').str.replace(',', '').astype(float)
+        
+        risk_df['Risk Score (0-100)'] = pd.to_numeric(risk_df['Risk Score (0-100)'], errors='coerce').fillna(1)
+        # Plotly size cannot be 0 or negative. We force a minimum size of 1.
+        risk_df['Plot Size'] = risk_df['Risk Score (0-100)'].apply(lambda x: max(1, int(x)))
+        
+        # Ensure Days Open exists
+        if 'Days Open' not in risk_df.columns:
+            risk_df['Days Open'] = 0
+
         fig_risk = px.scatter_3d(
             risk_df, x="Days Open", y="Risk Score (0-100)", z="Expected Loss ($)", color="Recommendation",
-            hover_data=['Vessel', 'Description'], size="Risk Score (0-100)", size_max=25,
+            hover_data=['Vessel', 'Description'], size="Plot Size", size_max=25,
             template="plotly_dark", color_discrete_map={"CRITICAL THREAT": "#ef4444", "DISP REQUIRED": "#f59e0b", "MONITOR": "#10b981"}
         )
         fig_risk.update_layout(
@@ -202,11 +302,12 @@ elif page == "/// SPATIAL RISK MATRIX":
         )
         st.plotly_chart(fig_risk, use_container_width=True, config={'displayModeBar': False})
         
-        # Format currency for the table
-        display_df = risk_df.copy()
-        display_df['Expected Loss ($)'] = display_df['Expected Loss ($)'].apply(lambda x: f"${x:,}")
+        # Re-format currency purely for the table display, keeping the raw data safe
+        display_df = risk_df.drop(columns=['Plot Size'], errors='ignore').copy()
+        display_df['Expected Loss ($)'] = display_df['Expected Loss ($)'].apply(lambda x: f"${int(x):,}")
         st.dataframe(display_df, use_container_width=True, hide_index=True)
-    else: st.success("100% TEMPORAL COMPLIANCE. NO UNBOUNDED RISKS DETECTED.")
+    else: 
+        st.success("100% TEMPORAL COMPLIANCE. NO UNBOUNDED RISKS DETECTED.")
 
 elif page == "/// INTEGRITY LEDGER":
     st.markdown("<h2>DATA INTEGRITY LEDGER</h2>", unsafe_allow_html=True)
