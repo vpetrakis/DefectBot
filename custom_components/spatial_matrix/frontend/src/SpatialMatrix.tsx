@@ -1,31 +1,38 @@
 import { Streamlit, withStreamlitConnection, ComponentProps } from "streamlit-component-lib"
 import React, { useEffect } from "react"
-// Imagine importing Three.js or a fluid Drag-and-Drop library here
+import "./SpatialMatrix.css"
 
 const SpatialMatrix = (props: ComponentProps) => {
-  // 1. Receive data from your Python Pandas dataframe
-  const fleetData = props.args["data"]
+  const data = props.args.data || []
 
-  // 2. Tell Streamlit how tall this component should be
   useEffect(() => {
-    Streamlit.setFrameHeight(600)
-  }, [])
+    Streamlit.setFrameHeight(Math.max(600, Math.ceil(data.length / 3) * 150))
+  }, [data.length])
 
-  // 3. A function that triggers when a user interacts at 60fps
-  const onVesselClicked = (vesselName: string) => {
-    // SEND DATA BACK TO PYTHON instantly
-    Streamlit.setComponentValue({ action: "inspect", target: vesselName })
+  const onNodeClicked = (vessel: string, caseRef: string) => {
+    // Send 60fps interaction back to Python server instantly
+    Streamlit.setComponentValue({ action: "inspect", vessel: vessel, ref: caseRef })
   }
 
-  // 4. Render the hyper-smooth UI (React handles this, not Streamlit)
   return (
-    <div className="cinematic-react-container">
-       {/* Your custom 3D WebGL canvas or fluid drag-and-drop 
-         interface goes here, completely immune to Streamlit's lag.
-       */}
-       <button onClick={() => onVesselClicked(fleetData[0].vessel)}>
-         Inspect {fleetData[0].vessel}
-       </button>
+    <div className="matrix-container">
+      {data.map((item: any) => {
+        let borderClass = "node-monitor"
+        if (item.Recommendation === "CRITICAL THREAT") borderClass = "node-critical"
+        if (item.Recommendation === "DISP REQUIRED") borderClass = "node-review"
+
+        return (
+          <div 
+            key={item.id} 
+            className={`matrix-node ${borderClass}`}
+            onClick={() => onNodeClicked(item.Vessel, item['Case Ref'])}
+          >
+            <div className="node-vessel">{item.Vessel} // {item['Case Ref']}</div>
+            <div className="node-risk">Risk: {item['Risk Score']}</div>
+            <div className="node-desc">${item['Expected Loss'].toLocaleString()} | {item.Description}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }
