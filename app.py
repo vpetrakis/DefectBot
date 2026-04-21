@@ -171,11 +171,21 @@ elif page == "2. Asset Deep-Dive":
     cols_to_show.append('True Condition')
     cols_to_show.append('Tag')
     
+    # --- BULLETPROOF STYLING FAILSAFE ---
+    # Accounts for Pandas 2.1.0+ deprecating .applymap() in favor of .map()
+    def highlight_critical(val):
+        if str(val) in ['OVERDUE', 'CRITICAL']:
+            return 'color: #ef4444; font-weight: bold'
+        return ''
+
+    styler = vessel_data[cols_to_show].style
+    try:
+        styled_df = styler.map(highlight_critical, subset=['True Condition', 'Tag'])
+    except AttributeError:
+        styled_df = styler.applymap(highlight_critical, subset=['True Condition', 'Tag'])
+
     st.dataframe(
-        vessel_data[cols_to_show].style.applymap(
-            lambda x: 'color: #ef4444; font-weight: bold' if x == 'OVERDUE' or x == 'CRITICAL' else '', 
-            subset=['True Condition', 'Tag']
-        ),
+        styled_df,
         use_container_width=True,
         hide_index=True,
         height=500
