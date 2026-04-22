@@ -50,19 +50,18 @@ def build_vessel_topology():
     return G
 
 def assign_system_node(description):
-    """Contextual NLP Routing with Confidence Scoring."""
+    """Contextual NLP Routing (Safe Degradation Mode)"""
     desc = str(description).upper()
-    if any(kw in desc for kw in ['DG1', 'GEN 1', 'GENERATOR 1']): return pd.Series(["DG1", "HIGH"])
-    if any(kw in desc for kw in ['DG2', 'GEN 2', 'GENERATOR 2']): return pd.Series(["DG2", "HIGH"])
-    if any(kw in desc for kw in ['SWITCHBOARD', 'MSB', 'POWER']): return pd.Series(["MAIN_SWITCHBOARD", "HIGH"])
-    if any(kw in desc for kw in ['COOLING', 'JACKET WATER']): return pd.Series(["ME_COOLING", "HIGH"])
-    if any(kw in desc for kw in ['MAIN ENGINE', 'M/E']): return pd.Series(["MAIN_ENGINE", "HIGH"])
-    if any(kw in desc for kw in ['PROPULSION', 'SHAFT', 'PROPELLER']): return pd.Series(["PROPULSION", "HIGH"])
-    if any(kw in desc for kw in ['STEERING', 'RUDDER']): return pd.Series(["STEERING", "HIGH"])
-    if any(kw in desc for kw in ['CABIN', 'GALLEY', 'LAUNDRY']): return pd.Series(["ISOLATED", "HIGH"])
+    if any(kw in desc for kw in ['DG1', 'GEN 1', 'GENERATOR 1']): return "DG1"
+    if any(kw in desc for kw in ['DG2', 'GEN 2', 'GENERATOR 2']): return "DG2"
+    if any(kw in desc for kw in ['SWITCHBOARD', 'MSB', 'POWER']): return "MAIN_SWITCHBOARD"
+    if any(kw in desc for kw in ['COOLING', 'JACKET WATER']): return "ME_COOLING"
+    if any(kw in desc for kw in ['MAIN ENGINE', 'M/E']): return "MAIN_ENGINE"
+    if any(kw in desc for kw in ['PROPULSION', 'SHAFT', 'PROPELLER']): return "PROPULSION"
+    if any(kw in desc for kw in ['STEERING', 'RUDDER']): return "STEERING"
     
-    # If the algorithm cannot confidently map it, flag it for human review.
-    return pd.Series(["UNKNOWN", "LOW"])
+    # SILENT FALLBACK: If ambiguous, isolate it so it doesn't crash or cascade falsely.
+    return "ISOLATED"
 
 # ==========================================
 # 3. WEIBULL STOCHASTIC ENGINE
@@ -153,11 +152,8 @@ def process_uploaded_files(uploaded_files):
     if 'Date of Initial Reporting' in master_df.columns:
         master_df['Date of Initial Reporting'] = pd.to_datetime(master_df['Date of Initial Reporting'], errors='coerce')
     
-    # Apply NLP Routing
-    master_df[['System Node', 'Confidence']] = master_df['Case Description'].apply(assign_system_node)
-    
-    # Ensure every row has a unique identifier for the Streamlit Data Editor
-    master_df['_ID'] = range(len(master_df)) 
+    # Apply NLP Routing (Safe Degradation)
+    master_df['System Node'] = master_df['Case Description'].apply(assign_system_node)
     return master_df
 
 # ==========================================
@@ -171,55 +167,11 @@ if not uploaded_files:
     st.markdown("<h1 style='text-align: center; margin-top: 15vh;'>AWAITING TELEMETRY</h1>", unsafe_allow_html=True)
     st.stop()
 
-# Load raw data from cache
-raw_df = process_uploaded_files(uploaded_files)
-if raw_df.empty: st.error("FAULT: ZERO VALID METRICS DETECTED."); st.stop()
+# Ingest and Process Data silently
+master_df = process_uploaded_files(uploaded_files)
+if master_df.empty: st.error("FAULT: ZERO VALID METRICS DETECTED."); st.stop()
 
-# We copy the raw data so we can apply manual edits safely
-master_df = raw_df.copy()
-
-# --- THE DETERMINISTIC GATE (TRIAGE UI) ---
-# Identify which rows the NLP engine failed to map confidently
-low_confidence_mask = master_df['Confidence'] == 'LOW'
-
-if low_confidence_mask.any():
-    st.markdown("<h2>⚠️ ENTITY RESOLUTION REQUIRED</h2>", unsafe_allow_html=True)
-    st.warning("The NLP engine detected ambiguous descriptions. To prevent NetworkX cascading errors, manual mapping is required.")
-    
-    # Isolate the problematic rows
-    triage_df = master_df[low_confidence_mask].copy()
-    
-    # Render the interactive data editor
-    edited_triage_df = st.data_editor(
-        triage_df[['_ID', 'Vessel', 'Case Reference', 'Case Description', 'System Node']],
-        column_config={
-            "_ID": None, # Hide the internal ID column
-            "System Node": st.column_config.SelectboxColumn(
-                "Map to System (REQUIRED)", 
-                options=["DG1", "DG2", "MAIN_SWITCHBOARD", "ME_COOLING", "MAIN_ENGINE", "PROPULSION", "STEERING", "ISOLATED"], 
-                required=True
-            )
-        },
-        disabled=["Vessel", "Case Reference", "Case Description"],
-        use_container_width=True, 
-        hide_index=True,
-        key="triage_editor" # Crucial for Streamlit memory
-    )
-    
-    # Merge the human corrections back into the master dataframe
-    for _, row in edited_triage_df.iterrows():
-        idx = master_df[master_df['_ID'] == row['_ID']].index[0]
-        master_df.at[idx, 'System Node'] = row['System Node']
-        
-    # Check if the user successfully cleared all 'UNKNOWN' tags
-    if "UNKNOWN" in edited_triage_df['System Node'].values:
-        st.error("SYSTEM HALTED: You must select a system from the dropdown menu for every 'UNKNOWN' row before the Weibull engine can safely compute network risk.")
-        st.stop() # Halts execution here. When the user changes a dropdown, Streamlit reruns from top to bottom.
-        
-    st.success("Triage Complete. Network alignment verified.")
-    st.divider()
-
-# --- EXECUTE MATH NOW THAT DATA IS 100% CLEAN ---
+# Execute Math
 G = build_vessel_topology()
 risk_df = run_risk_simulation(master_df, G, simulations=2000)
 
