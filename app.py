@@ -12,7 +12,6 @@ import traceback
 # ==========================================
 st.set_page_config(page_title="DEFECTBOT // OS", layout="wide", initial_sidebar_state="expanded")
 
-# Removed all emojis and 'cheap' visual elements. Applied strict, high-contrast, clinical styling.
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -35,6 +34,7 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #f
 # ==========================================
 # 2. THE DEEP MARINE ONTOLOGY & NETWORKX
 # ==========================================
+@st.cache_resource
 def build_vessel_topology():
     G = nx.DiGraph()
     G.add_nodes_from(["DG1", "DG2", "MAIN_SWITCHBOARD", "ME_COOLING", "MAIN_ENGINE", "PROPULSION", "STEERING", "ISOLATED"])
@@ -49,20 +49,15 @@ def build_vessel_topology():
     return G
 
 def assign_system_node(description):
-    """
-    Autonomous Deep Marine Dictionary. 
-    Maps specific sub-components to their parent network nodes.
-    """
     desc = str(description).upper()
     
     # 1. Main Engine Ontology
     me_keywords = ['MAIN ENGINE', 'M/E', 'PISTON', 'LINER', 'EXHAUST VALVE', 'TURBOCHARGER', 'TURBO', 'JACKET WATER', 'CRANKCASE', 'CAMSHAFT', 'SCAVENGE', 'CROSSHEAD', 'FIP', 'INJECTOR']
     if any(kw in desc for kw in me_keywords): return "MAIN_ENGINE"
     
-    # 2. Generator Ontology (Explicitly looking for 1 or 2 first)
+    # 2. Generator Ontology 
     if any(kw in desc for kw in ['DG1', 'GEN 1', 'GENERATOR 1', 'AE 1']): return "DG1"
     if any(kw in desc for kw in ['DG2', 'GEN 2', 'GENERATOR 2', 'AE 2']): return "DG2"
-    # Generic generator parts act as a proxy on DG1 to trigger switchboard risk
     dg_generic = ['AVR', 'GOVERNOR', 'STATOR', 'ALTERNATOR', 'ROTOR', 'EXCITER', 'DIESEL GEN']
     if any(kw in desc for kw in dg_generic): return "DG1" 
     
@@ -82,7 +77,6 @@ def assign_system_node(description):
     steer_keywords = ['STEERING', 'RUDDER', 'TELEMOTOR', 'RAM', 'TILLER', 'HYDRAULIC PUMP']
     if any(kw in desc for kw in steer_keywords): return "STEERING"
     
-    # Silent Fallback
     return "ISOLATED"
 
 def get_urgency_multiplier(description):
@@ -144,6 +138,7 @@ def run_risk_simulation(df, G, simulations=2000):
 # ==========================================
 # 4. DATA INGESTION (HUNTER-SEEKER)
 # ==========================================
+@st.cache_data(show_spinner=False)
 def process_uploaded_files(uploaded_files):
     df_list = []
     for file in uploaded_files:
@@ -191,7 +186,7 @@ def process_uploaded_files(uploaded_files):
 # 5. SECURE OS UI & ROUTING
 # ==========================================
 st.sidebar.markdown("<h3 style='font-family: \"JetBrains Mono\", monospace; color: #fff;'>DEFECTBOT // OS</h3>", unsafe_allow_html=True)
-st.sidebar.caption("SYS.VERSION: 4.0 // CLINICAL BUILD")
+st.sidebar.caption("SYS.VERSION: 4.1 // CLINICAL BUILD")
 uploaded_files = st.sidebar.file_uploader("INGEST TELEMETRY", type=['xlsx', 'csv'], accept_multiple_files=True)
 
 if not uploaded_files:
@@ -224,9 +219,9 @@ try:
         
         st.markdown("<br><p class='critical-text'>PRIORITY ACTION QUEUE</p>", unsafe_allow_html=True)
         
-        # Clinical styling for the dataframe
+        # Clinical styling with the updated pandas .map() method
         st.dataframe(
-            risk_df.head(20).style.applymap(
+            risk_df.head(20).style.map(
                 lambda x: 'color: #ef4444; font-weight: bold;' if x == 'CRITICAL' else ('color: #a1a1aa;' if x == 'NOMINAL' else 'color: #f59e0b;'),
                 subset=['Status']
             ),
