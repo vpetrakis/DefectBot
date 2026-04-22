@@ -188,7 +188,7 @@ if page == "/// OVERVIEW":
         fig_bar.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", hovermode="x unified", font=dict(family="Inter", color="#94a3b8"), xaxis=dict(showgrid=False, zeroline=False, title=""), yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", zeroline=False, title="VOLUME"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=""), margin=dict(t=10, b=10, l=0, r=0))
         st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
 
-    st.markdown("<p style='color: #ef4444; font-size: 0.85rem; letter-spacing: 2px;'>🚨 PRIORITY ACTION QUEUE</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #ef4444; font-size: 0.85rem; letter-spacing: 2px;'>  PRIORITY ACTION QUEUE</p>", unsafe_allow_html=True)
     critical_df = master_df[master_df['Tag'] == 'CRITICAL'].head(10)[['Vessel', 'Case Reference', 'Case Description', 'True Condition', 'Due Date']] if not master_df[master_df['Tag'] == 'CRITICAL'].empty else pd.DataFrame()
     if not critical_df.empty:
         if 'Due Date' in critical_df.columns: critical_df['Due Date'] = critical_df['Due Date'].dt.strftime('%Y-%m-%d').fillna('NO DATE')
