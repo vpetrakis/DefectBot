@@ -60,6 +60,8 @@ def assign_system_node(description):
     if any(kw in desc for kw in ['PROPULSION', 'SHAFT', 'PROPELLER']): return pd.Series(["PROPULSION", "HIGH"])
     if any(kw in desc for kw in ['STEERING', 'RUDDER']): return pd.Series(["STEERING", "HIGH"])
     if any(kw in desc for kw in ['CABIN', 'GALLEY', 'LAUNDRY']): return pd.Series(["ISOLATED", "HIGH"])
+    
+    # If the algorithm cannot confidently map it, flag it for human review.
     return pd.Series(["UNKNOWN", "LOW"])
 
 # ==========================================
@@ -144,13 +146,18 @@ def process_uploaded_files(uploaded_files):
                 temp_df['Vessel'] = vessel_name
                 df_list.append(temp_df)
         except Exception: pass
+    
     if not df_list: return pd.DataFrame()
     master_df = pd.concat(df_list, ignore_index=True)
+    
     if 'Date of Initial Reporting' in master_df.columns:
         master_df['Date of Initial Reporting'] = pd.to_datetime(master_df['Date of Initial Reporting'], errors='coerce')
     
     # Apply NLP Routing
     master_df[['System Node', 'Confidence']] = master_df['Case Description'].apply(assign_system_node)
+    
+    # Ensure every row has a unique identifier for the Streamlit Data Editor
+    master_df['_ID'] = range(len(master_df)) 
     return master_df
 
 # ==========================================
@@ -164,30 +171,51 @@ if not uploaded_files:
     st.markdown("<h1 style='text-align: center; margin-top: 15vh;'>AWAITING TELEMETRY</h1>", unsafe_allow_html=True)
     st.stop()
 
-master_df = process_uploaded_files(uploaded_files)
-if master_df.empty: st.error("FAULT: ZERO VALID METRICS DETECTED."); st.stop()
+# Load raw data from cache
+raw_df = process_uploaded_files(uploaded_files)
+if raw_df.empty: st.error("FAULT: ZERO VALID METRICS DETECTED."); st.stop()
+
+# We copy the raw data so we can apply manual edits safely
+master_df = raw_df.copy()
 
 # --- THE DETERMINISTIC GATE (TRIAGE UI) ---
+# Identify which rows the NLP engine failed to map confidently
 low_confidence_mask = master_df['Confidence'] == 'LOW'
+
 if low_confidence_mask.any():
     st.markdown("<h2>⚠️ ENTITY RESOLUTION REQUIRED</h2>", unsafe_allow_html=True)
     st.warning("The NLP engine detected ambiguous descriptions. To prevent NetworkX cascading errors, manual mapping is required.")
     
-    edited_df = st.data_editor(
-        master_df[low_confidence_mask][['Vessel', 'Case Reference', 'Case Description', 'System Node']],
+    # Isolate the problematic rows
+    triage_df = master_df[low_confidence_mask].copy()
+    
+    # Render the interactive data editor
+    edited_triage_df = st.data_editor(
+        triage_df[['_ID', 'Vessel', 'Case Reference', 'Case Description', 'System Node']],
         column_config={
-            "System Node": st.column_config.SelectboxColumn("Map to System (REQUIRED)", options=["DG1", "DG2", "MAIN_SWITCHBOARD", "ME_COOLING", "MAIN_ENGINE", "PROPULSION", "STEERING", "ISOLATED"], required=True)
+            "_ID": None, # Hide the internal ID column
+            "System Node": st.column_config.SelectboxColumn(
+                "Map to System (REQUIRED)", 
+                options=["DG1", "DG2", "MAIN_SWITCHBOARD", "ME_COOLING", "MAIN_ENGINE", "PROPULSION", "STEERING", "ISOLATED"], 
+                required=True
+            )
         },
         disabled=["Vessel", "Case Reference", "Case Description"],
-        use_container_width=True, hide_index=True
+        use_container_width=True, 
+        hide_index=True,
+        key="triage_editor" # Crucial for Streamlit memory
     )
     
-    if "UNKNOWN" in edited_df['System Node'].values:
-        st.error("SYSTEM HALTED: You must resolve all 'UNKNOWN' tags before the Weibull engine can safely compute network risk.")
-        st.stop()
+    # Merge the human corrections back into the master dataframe
+    for _, row in edited_triage_df.iterrows():
+        idx = master_df[master_df['_ID'] == row['_ID']].index[0]
+        master_df.at[idx, 'System Node'] = row['System Node']
         
-    master_df.loc[low_confidence_mask, 'System Node'] = edited_df['System Node'].values
-    master_df.loc[low_confidence_mask, 'Confidence'] = 'HIGH'
+    # Check if the user successfully cleared all 'UNKNOWN' tags
+    if "UNKNOWN" in edited_triage_df['System Node'].values:
+        st.error("SYSTEM HALTED: You must select a system from the dropdown menu for every 'UNKNOWN' row before the Weibull engine can safely compute network risk.")
+        st.stop() # Halts execution here. When the user changes a dropdown, Streamlit reruns from top to bottom.
+        
     st.success("Triage Complete. Network alignment verified.")
     st.divider()
 
